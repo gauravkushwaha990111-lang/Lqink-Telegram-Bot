@@ -1,4 +1,4 @@
- # /home/gauravwhy/Lqink_bot/main.py (FINAL LOGIC MIGRATED TO FLASK WEBHOOK)
+# /home/gauravwhy/Lqink_bot/main.py (FINAL CODE WITH /ADDLINK AND VIDEO FIX)
 import logging
 import re
 import os
@@ -14,6 +14,7 @@ from typing import Final
 try:
     from scraper import run_scraper, clean_up_files
 except ImportError:
+    # Error will be logged at startup if scraper.py is missing
     sys.exit(1)
 
 # Logging setup
@@ -30,7 +31,7 @@ if not BOT_TOKEN:
 BOT = Bot(token=BOT_TOKEN)
 # ---------------------
 
-# URL Regex (yahi rahega)
+# URL Regex
 URL_REGEX = re.compile(
     r'^(?:http|ftp)s?://' 
     r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+(?:[A-Z]{2,6}\.?|[A-Z0-9-]{2,}\.?)|' 
@@ -99,10 +100,15 @@ def handle_update(update_data):
                         file_handle = open(item_path, 'rb')
                         open_files.append(file_handle)
                         
-                        if item_path.endswith(('.jpg', '.png')):
-                            media_group.append(InputMediaPhoto(media=file_handle))
-                        elif item_path.endswith(('.mp4', '.mov')):
-                            media_group.append(InputMediaVideo(media=file_handle))
+                        # Get file extension for robust checking
+                        file_extension = os.path.splitext(item_path)[1].lower()
+
+                        if file_extension in ('.jpg', '.jpeg', '.png'):
+                            media_group.append(InputMediaPhoto(media=file_handle, caption="Image from Scraper"))
+                        
+                        # Added more common video formats for robustness
+                        elif file_extension in ('.mp4', '.mov', '.avi', '.webm'):
+                            media_group.append(InputMediaVideo(media=file_handle, caption="Video from Scraper"))
                             
                         local_files_to_clean.append(item_path) 
                         
@@ -112,7 +118,8 @@ def handle_update(update_data):
                         
                 if media_group:
                     try:
-                        run_sync(BOT.send_media_group(chat_id=chat_id, media=media_group))
+                        # Only send the first 10 files if there are many
+                        run_sync(BOT.send_media_group(chat_id=chat_id, media=media_group[:10]))
                         logger.info("Media group successfully sent.")
                     finally:
                         for fh in open_files:
@@ -140,13 +147,16 @@ def handle_update(update_data):
                     index_text = f"**{i+1}.** Download Link"
                     run_sync(BOT.send_message(chat_id, index_text, parse_mode='Markdown'))
                     
-                    # b) Send the raw URL in the next line to FORCE the card preview
-                    # Telegram Web Preview केवल URL वाली लाइन पर ही सबसे अच्छा काम करता है।
-                    run_sync(BOT.send_message(chat_id, link_url, disable_web_page_preview=False)) 
+                    # ⚠️ FIX: Sending the URL prefixed with /addlink
+                    link_with_command = f"/addlink {link_url}"
                     
-        else:
-             run_sync(BOT.edit_message_text(chat_id=chat_id, message_id=status_msg.message_id,
-                                            text="⚠️ Scraping complete, but no download links were found."))
+                    # b) Send the URL prefixed with /addlink
+                    run_sync(BOT.send_message(chat_id, link_with_command, 
+                                              disable_web_page_preview=False)) 
+                    
+            else:
+                 run_sync(BOT.edit_message_text(chat_id=chat_id, message_id=status_msg.message_id,
+                                                text="⚠️ Scraping complete, but no download links were found."))
 
         # D) User Count (Optional: Display Stats)
         if results['user_count'] and results['user_count'] != 'N/A':
