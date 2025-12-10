@@ -1,14 +1,15 @@
-# /home/gauravwhy/Lqink_bot/main.py (FINAL CODE: /addlink and /download supported)
+# /home/gauravwhy/Lqink_bot/main.py (FINAL CODE: Media Grouping Fix)
 import logging
 import re
 import os
 import sys
 import asyncio 
 import tempfile
-from telegram import Bot, error
+from telegram import Bot, error, InputMediaPhoto, InputMediaVideo # <-- NEW IMPORTS ADDED
 from typing import Final
 from flask import Flask, request, jsonify 
-import requests # Direct downloading ke liye
+import requests 
+from urllib.parse import urlparse
 
 # scraper.py से फंक्शन इम्पोर्ट करना
 try:
@@ -54,7 +55,6 @@ URL_REGEX = re.compile(
 
 # --- FORMATTING FUNCTIONS ---
 def format_links(title, link_list):
-    """Formats download/general links for Telegram output."""
     if not link_list: return ""
     text = f"\n**{title} ({len(link_list)} Found):**\n"
     for i, (link_text, href) in enumerate(link_list):
@@ -64,7 +64,6 @@ def format_links(title, link_list):
     return text
 
 def format_media(title, media_list):
-    """Formats image/video links for Telegram output."""
     if not media_list: return ""
     text = f"\n**{title} ({len(media_list)} Found):**\n"
     for i, src in enumerate(media_list):
@@ -84,9 +83,9 @@ async def handle_direct_file_download_and_send(chat_id, file_url):
             await BOT.send_message(chat_id, f"🎬 Attempting direct download (Max {MAX_FILE_SIZE_MB}MB)...")
 
             # 1. फ़ाइल को डाउनलोड करें (Streaming)
-            local_filename = os.path.join(temp_dir, os.path.basename(file_url).split('?')[0])
-            if not local_filename or len(local_filename) < 5:
-                local_filename = os.path.join(temp_dir, "downloaded_file")
+            path = urlparse(file_url).path
+            base_name = os.path.basename(path).split('?')[0] or 'downloaded_file'
+            local_filename = os.path.join(temp_dir, base_name)
 
             # Streaming download with timeout and size check
             with requests.get(file_url, stream=True, timeout=60) as r:
@@ -106,15 +105,12 @@ async def handle_direct_file_download_and_send(chat_id, file_url):
             caption = f"✅ Direct Download: {os.path.basename(local_filename)}"
             
             if local_filename.lower().endswith(('.mp4', '.mov', '.avi')):
-                # Video file
                 with open(local_filename, 'rb') as file_to_upload:
                     await BOT.send_video(chat_id=chat_id, video=file_to_upload, caption=caption, supports_streaming=True)
             elif local_filename.lower().endswith(('.jpg', '.jpeg', '.png', '.gif')):
-                 # Image file
                  with open(local_filename, 'rb') as file_to_upload:
                     await BOT.send_photo(chat_id=chat_id, photo=file_to_upload, caption=caption)
             else:
-                 # Other documents
                  with open(local_filename, 'rb') as file_to_upload:
                     await BOT.send_document(chat_id=chat_id, document=file_to_upload, caption=caption)
                     
@@ -123,6 +119,36 @@ async def handle_direct_file_download_and_send(chat_id, file_url):
         except Exception as e:
             logger.error(f"File Download/Upload Error: {e}")
             await BOT.send_message(chat_id, f"❌ File processing error: {e}. Possible Timeout or Link not direct.")
+
+
+# --- CORE FUNCTIONS: SCRAPER (With Media Group Logic) ---
+
+async def send_media_group(chat_id, images, videos):
+    """Sends multiple images and videos as a Telegram Media Group/Album."""
+    media = []
+    
+    # Photos ko InputMediaPhoto ke roop mein jodna (Max 10 items)
+    for i, img_url in enumerate(images[:5]): # Sirf pehli 5 photos
+        # Photos ko URL se bhejne ke liye InputMediaPhoto ka upyog karen
+        media.append(InputMediaPhoto(media=img_url, caption=f"Image {i+1}"))
+
+    # Videos ko InputMediaVideo ke roop mein jodna (Max 10 items)
+    for i, vid_url in enumerate(videos[:2]): # Sirf pehle 2 videos
+        if len(media) < 10:
+             media.append(InputMediaVideo(media=vid_url, caption=f"Video {i+1}"))
+        else:
+             break
+
+    if media:
+        try:
+            # Media group bhej dein
+            await BOT.send_media_group(chat_id=chat_id, media=media)
+            return True
+        except Exception as e:
+            logger.error(f"Error sending media group: {e}")
+            await BOT.send_message(chat_id, f"❌ Media Group Error: Could not send photos/videos. Sending links instead.")
+            return False
+    return False
 
 
 def handle_scrape_and_send(chat_id, user_url):
@@ -134,19 +160,32 @@ def handle_scrape_and_send(chat_id, user_url):
         extracted_data = scrape_result['data']
         response_text = f"✅ Extracted Data for: **{user_url}**\n\n"
         
-        # Format and append extracted data
+        # Images aur Videos nikalna
+        images = extracted_data.get('images', [])
+        videos = extracted_data.get('videos', [])
+        
+        # 1. Media Group bhejen (Photos aur Videos)
+        media_sent = run_sync(send_media_group(chat_id, images, videos))
+        
+        # 2. Download Links bhejen (Text ke roop mein)
         download_text = format_links("⬇️ DOWNLOAD LINKS", extracted_data.get('downloads', []))
-        image_text = format_media("🖼️ IMAGE LINKS (Top 6)", extracted_data.get('images', []))
-        video_text = format_media("🎥 VIDEO LINKS (Top 2)", extracted_data.get('videos', []))
+        
+        # Agar media group nahi bhej paye aur links available hain
+        if not media_sent:
+             # Agar media group fail ho gaya to images/videos ke links bhi text mein de dein
+             image_text = format_media("🖼️ IMAGE LINKS (Top 6)", images)
+             video_text = format_media("🎥 VIDEO LINKS (Top 2)", videos)
+             response_text += image_text + video_text
 
-        response_text += download_text + image_text + video_text
+        response_text += download_text
              
-        if not download_text and not image_text and not video_text:
+        if not download_text and not images and not videos:
             response_text += "ℹ️ No specific download or media links found on the page."
 
     else:
         response_text = f"❌ Scraping Failed: {scrape_result.get('message', 'Unknown Error')}"
 
+    # Response sirf download links ya error ke liye
     run_sync(BOT.send_message(chat_id, response_text, parse_mode='Markdown', disable_web_page_preview=True))
 
 
@@ -164,14 +203,14 @@ def handle_update(update_data):
     command = parts[0].lower()
     url = parts[1] if len(parts) > 1 and URL_REGEX.fullmatch(parts[1]) else None
     
-    # Default to /addlink if only URL is sent
+    # Default to /download if only URL is sent
     if URL_REGEX.fullmatch(text):
-        command = '/addlink' # <--- CHANGED TO /addlink
+        command = '/download' 
         url = text
 
     try:
         if command == "/start":
-            run_sync(BOT.send_message(chat_id, "Welcome! Use:\n- `/addlink <URL>` to extract links/media.\n- `/download <Direct URL>` for file upload (Max 20MB)."))
+            run_sync(BOT.send_message(chat_id, "Welcome! Send me a direct file URL to download and upload it (Max 20MB). You can also use the /addlink command for scraping links."))
             return
 
         if not url:
@@ -181,15 +220,15 @@ def handle_update(update_data):
         run_sync(BOT.send_message(chat_id, f"🔍 Processing: **{command}** for **{url}**...", parse_mode='Markdown'))
         
         if command == '/download':
-            # Direct File Download and Upload Logic
+            # Direct File Download and Upload Logic (Default Action)
             run_sync(handle_direct_file_download_and_send(chat_id, url))
         
-        elif command == '/addlink': # <--- CHECKING FOR /addlink
+        elif command == '/addlink':
             # Scraping and Link Extraction Logic
             handle_scrape_and_send(chat_id, url)
         
         else:
-            run_sync(BOT.send_message(chat_id, "Invalid command. Use `/addlink` or `/download`."))
+            run_sync(BOT.send_message(chat_id, "Invalid command. Use `/addlink` or send a direct URL."))
 
     except Exception as e:
         logger.error(f"Global Update Handler Error: {e}")
