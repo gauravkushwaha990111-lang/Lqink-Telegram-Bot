@@ -13,7 +13,7 @@ SCRAPER_API_KEY = os.environ.get("SCRAPER_API_KEY")
 
 # --- UTILITY FUNCTIONS ---
 def fetch_html_via_api(url):
-    # ... (ScraperAPI call logic yahi rahega) ...
+    """Fetches HTML content using ScraperAPI."""
     if not SCRAPER_API_KEY: return None, "Error: SCRAPER_API_KEY not set. Check Render Variables."
     API_URL = "http://api.scraperapi.com/"
     payload = {'api_key': SCRAPER_API_KEY, 'url': url, 'country_code': 'us'}
@@ -31,6 +31,7 @@ def fetch_html_via_api(url):
 
 # --- ADVANCED EXTRACTION FUNCTIONS ---
 def extract_advanced_data(soup, base_url):
+    """Extracts Images, Videos, and Downloadable files/Links from HTML."""
     images = set()
     videos = set()
     downloads = set()
@@ -57,6 +58,7 @@ def extract_advanced_data(soup, base_url):
             
         is_download = False
         
+        # Check by extension
         if any(href.lower().endswith(ext) for ext in download_extensions):
              is_download = True
         
@@ -80,6 +82,7 @@ def extract_advanced_data(soup, base_url):
 
 # --- MAIN SCRAPER FUNCTION ---
 def run_scraper(url):
+    """Runs the scraping process."""
     html_content, error_msg = fetch_html_via_api(url)
     if error_msg: return {'status': 'error', 'message': error_msg}
 
