@@ -1,4 +1,4 @@
-# /home/gauravwhy/Lqink_bot/main.py (FINAL, COMPLETE COMBO LOGIC)
+# /home/gauravwhy/Lqink_bot/main.py (FINAL CODE: /addlink and /download supported)
 import logging
 import re
 import os
@@ -34,6 +34,7 @@ BOT = Bot(token=BOT_TOKEN)
 
 # --- ASYNC HELPER ---
 def run_sync(coroutine):
+    """Safely runs an async coroutine synchronously."""
     try:
         loop = asyncio.get_event_loop()
     except RuntimeError:
@@ -42,7 +43,7 @@ def run_sync(coroutine):
     return loop.run_until_complete(coroutine)
 # ---------------------
 
-# URL Regex (yahi rahega)
+# URL Regex
 URL_REGEX = re.compile(
     r'^(?:http|ftp)s?://' 
     r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+(?:[A-Z]{2,6}\.?|[A-Z0-9-]{2,}\.?)|' 
@@ -53,6 +54,7 @@ URL_REGEX = re.compile(
 
 # --- FORMATTING FUNCTIONS ---
 def format_links(title, link_list):
+    """Formats download/general links for Telegram output."""
     if not link_list: return ""
     text = f"\n**{title} ({len(link_list)} Found):**\n"
     for i, (link_text, href) in enumerate(link_list):
@@ -62,6 +64,7 @@ def format_links(title, link_list):
     return text
 
 def format_media(title, media_list):
+    """Formats image/video links for Telegram output."""
     if not media_list: return ""
     text = f"\n**{title} ({len(media_list)} Found):**\n"
     for i, src in enumerate(media_list):
@@ -69,10 +72,10 @@ def format_media(title, media_list):
         text += f"- [Media Link {i+1}]({src})\n"
     return text
 
-# --- CORE FUNCTIONS: DOWNLOADER (Handles VS Code Logic) ---
+# --- CORE FUNCTIONS: DOWNLOADER ---
 
 async def handle_direct_file_download_and_send(chat_id, file_url):
-    """सीधे HTTP रिक्वेस्ट का उपयोग करके फ़ाइल डाउनलोड करता है और Telegram पर bhejta hai (Max 20MB)."""
+    """Handles direct file download and Telegram upload (Max 20MB)."""
     
     MAX_FILE_SIZE_MB = 20 
     
@@ -85,6 +88,7 @@ async def handle_direct_file_download_and_send(chat_id, file_url):
             if not local_filename or len(local_filename) < 5:
                 local_filename = os.path.join(temp_dir, "downloaded_file")
 
+            # Streaming download with timeout and size check
             with requests.get(file_url, stream=True, timeout=60) as r:
                 r.raise_for_status()
                 downloaded_size = 0
@@ -102,12 +106,15 @@ async def handle_direct_file_download_and_send(chat_id, file_url):
             caption = f"✅ Direct Download: {os.path.basename(local_filename)}"
             
             if local_filename.lower().endswith(('.mp4', '.mov', '.avi')):
+                # Video file
                 with open(local_filename, 'rb') as file_to_upload:
                     await BOT.send_video(chat_id=chat_id, video=file_to_upload, caption=caption, supports_streaming=True)
             elif local_filename.lower().endswith(('.jpg', '.jpeg', '.png', '.gif')):
+                 # Image file
                  with open(local_filename, 'rb') as file_to_upload:
                     await BOT.send_photo(chat_id=chat_id, photo=file_to_upload, caption=caption)
             else:
+                 # Other documents
                  with open(local_filename, 'rb') as file_to_upload:
                     await BOT.send_document(chat_id=chat_id, document=file_to_upload, caption=caption)
                     
@@ -119,15 +126,15 @@ async def handle_direct_file_download_and_send(chat_id, file_url):
 
 
 def handle_scrape_and_send(chat_id, user_url):
-    """ScraperAPI का उपयोग करके लिंक्स और मीडिया निकालता है।"""
+    """Handles scraping for links and media (used by /addlink)."""
     
     scrape_result = run_scraper(user_url)
     
-    # ... (Scraping formatting logic yahi rahega) ...
     if scrape_result['status'] == 'success':
         extracted_data = scrape_result['data']
         response_text = f"✅ Extracted Data for: **{user_url}**\n\n"
         
+        # Format and append extracted data
         download_text = format_links("⬇️ DOWNLOAD LINKS", extracted_data.get('downloads', []))
         image_text = format_media("🖼️ IMAGE LINKS (Top 6)", extracted_data.get('images', []))
         video_text = format_media("🎥 VIDEO LINKS (Top 2)", extracted_data.get('videos', []))
@@ -145,24 +152,26 @@ def handle_scrape_and_send(chat_id, user_url):
 
 # --- HANDLE UPDATE MAIN LOGIC ---
 def handle_update(update_data):
+    """Processes a single Telegram Update dictionary."""
     message_data = update_data.get('message', {})
     text = message_data.get('text', '').strip()
     chat_id = message_data.get('chat', {}).get('id')
     
     if not chat_id or not text: return
     
+    # Parse command and URL
     parts = text.split(maxsplit=1)
     command = parts[0].lower()
     url = parts[1] if len(parts) > 1 and URL_REGEX.fullmatch(parts[1]) else None
     
-    # Default to /scrape if only URL is sent
+    # Default to /addlink if only URL is sent
     if URL_REGEX.fullmatch(text):
-        command = '/scrape'
+        command = '/addlink' # <--- CHANGED TO /addlink
         url = text
 
     try:
         if command == "/start":
-            run_sync(BOT.send_message(chat_id, "Welcome! Use:\n- `/scrape <URL>` to extract links/media.\n- `/download <Direct URL>` for file upload (Max 20MB)."))
+            run_sync(BOT.send_message(chat_id, "Welcome! Use:\n- `/addlink <URL>` to extract links/media.\n- `/download <Direct URL>` for file upload (Max 20MB)."))
             return
 
         if not url:
@@ -172,15 +181,15 @@ def handle_update(update_data):
         run_sync(BOT.send_message(chat_id, f"🔍 Processing: **{command}** for **{url}**...", parse_mode='Markdown'))
         
         if command == '/download':
-            # 1. Direct File Download and Upload Logic (Your VS Code feature)
+            # Direct File Download and Upload Logic
             run_sync(handle_direct_file_download_and_send(chat_id, url))
         
-        elif command == '/scrape':
-            # 2. Scraping and Link Extraction Logic
+        elif command == '/addlink': # <--- CHECKING FOR /addlink
+            # Scraping and Link Extraction Logic
             handle_scrape_and_send(chat_id, url)
         
         else:
-            run_sync(BOT.send_message(chat_id, "Invalid command. Use `/scrape` or `/download`."))
+            run_sync(BOT.send_message(chat_id, "Invalid command. Use `/addlink` or `/download`."))
 
     except Exception as e:
         logger.error(f"Global Update Handler Error: {e}")
@@ -189,6 +198,7 @@ def handle_update(update_data):
 
 # --- FLASK APPLICATION SETUP ---
 def create_app():  
+    """Creates the Flask app and webhook route for Gunicorn."""
     app = Flask(__name__)
     @app.route('/telegram', methods=['POST'])
     def webhook():
