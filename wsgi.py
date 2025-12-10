@@ -1,8 +1,4 @@
-# /home/gauravwhy/Lqink_bot/wsgi.py (FINAL & CLEAN for Railway)
-
+ # /home/gauravwhy/Lqink_bot/wsgi.py (FINAL & CLEAN for Render/Gunicorn)
 import sys
 from main import create_app
-
-# application variable jise gunicorn dekhta hai.
-# Railway yahan se Flask application ko load karega.
 application = create_app()
