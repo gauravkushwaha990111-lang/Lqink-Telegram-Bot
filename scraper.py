@@ -1,61 +1,100 @@
-# CODE D: /home/gauravwhy/Lqink_bot/scraper.py (Final Code - Stable I/O)
+# /home/gauravwhy/Lqink_bot/scraper.py (Final Code with ScraperAPI)
 
 import requests
 from bs4 import BeautifulSoup
 import os
-import tempfile
 import re
 import logging
+import json
 
 logger = logging.getLogger(__name__)
 
+# Render Environment Variable से API Key लोड करें
+SCRAPER_API_KEY = os.environ.get("SCRAPER_API_KEY")
+
 # --- UTILITY FUNCTIONS ---
 
-def fetch_html(url):
-    """Diye gaye URL se HTML content fetch karta hai."""
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-            'Referer': 'https://www.google.com/', 
-            # Proxy ko explicitly None par set karna
-            'Connection': 'keep-alive' 
-        }
+def fetch_html_via_api(url):
+    """ScraperAPI का उपयोग करके HTML content fetch करता है।"""
+    if not SCRAPER_API_KEY:
+        return None, "Error: SCRAPER_API_KEY not set."
         
-        session = requests.Session()
-        session.proxies = {'http': None, 'https': None}
+    API_URL = "http://api.scraperapi.com/"
+    
+    payload = {
+        'api_key': SCRAPER_API_KEY,
+        'url': url,
+        # Render पर JavaScript-heavy sites के लिए 'render=true' का उपयोग किया जा सकता है,
+        # लेकिन हम मुफ्त टियर के लिए इसे बंद रखते हैं।
+        # 'render': 'true', 
+        'country_code': 'us'
+    }
 
-        response = session.get(url, headers=headers, timeout=15)
-        response.raise_for_status() 
-        return response.content
+    try:
+        # ScraperAPI को कॉल करें
+        response = requests.get(API_URL, params=payload, timeout=30)
+        response.raise_for_status() # HTTP errors को हैंडल करें
+        
+        # ScraperAPI सफलतापूर्वक जवाब दे सकता है, लेकिन हो सकता है कि उसने कंटेंट लोड न किया हो
+        if response.status_code == 200:
+            return response.content, None
+        else:
+            return None, f"ScraperAPI returned status code: {response.status_code}"
+
     except requests.exceptions.RequestException as e:
-        logger.error(f"HTML fetch error for {url}: {e}")
-        return None
+        logger.error(f"API fetch error for {url}: {e}")
+        return None, f"Network or API Call Error: {e}"
 
-def download_file(url, file_type):
-    # Dummy function for download_file (since scraping is blocked)
-    return None
 
-def clean_up_files(file_list):
-    # Dummy function for clean_up_files
-    pass
+# --- EXTRACTION FUNCTIONS (BASIC) ---
 
-# --- SCRAPING LOGIC FUNCTIONS ---
+def extract_links(soup, base_url):
+    """Soup object से पहले 5 non-empty links निकालता है।"""
+    links = {}
+    count = 0
+    for a_tag in soup.find_all('a', href=True):
+        href = a_tag['href']
+        text = a_tag.get_text(strip=True)
+        
+        if href and text and href.startswith('http') and count < 5:
+            links[text] = href
+            count += 1
+            
+    return links
 
 def extract_media(soup):
+    """Dummy function for media (आप इसे बाद में जोड़ सकते हैं)"""
     return []
-
-def extract_links(soup):
-    return {}
-
-def extract_user_count(soup):
-    return "N/A"
 
 # --- MAIN SCRAPER FUNCTION ---
 
 def run_scraper(url):
-    """Pura scraping process chalaata hai aur results return karta hai."""
-    # Since we are bypassing the actual function call in main.py, this will only log
-    logger.info(f"Scraping logic bypassed by main.py for: {url}")
+    """ScraperAPI का उपयोग करके scraping process चलाता है।"""
     
-    # Ye function ab fail ho jayega, lekin main.py ise check nahi karega
-    return {'status': 'error', 'message': 'Failed to fetch website content.'}
+    html_content, error_msg = fetch_html_via_api(url)
+    
+    if error_msg:
+        return {'status': 'error', 'message': error_msg}
+
+    try:
+        # HTML को पार्स करें
+        soup = BeautifulSoup(html_content, 'html.parser')
+
+        # डेटा निकालें
+        extracted_links = extract_links(soup, url)
+        # extracted_media = extract_media(soup) # Media abhi skip kiya
+
+        return {
+            'status': 'success',
+            'links': extracted_links,
+            'media': [], # Media abhi empty hai
+            'message': 'Data extracted via ScraperAPI.'
+        }
+
+    except Exception as e:
+        logger.error(f"Scraping/Parsing Error: {e}")
+        return {'status': 'error', 'message': f"Parsing failed: {e}"}
+
+def clean_up_files(file_list):
+    """Dummy function for cleanup."""
+    pass
