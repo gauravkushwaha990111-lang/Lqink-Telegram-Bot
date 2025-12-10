@@ -1,6 +1,6 @@
-Flask
+ Flask
 python-telegram-bot==22.5
 requests
 beautifulsoup4
 gunicorn
-yt-dlp
+# yt-dlp (Optional, video download ke liye)
