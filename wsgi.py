@@ -1,18 +1,12 @@
-# CODE B: /home/gauravwhy/Lqink_bot/wsgi.py
+# /home/gauravwhy/Lqink_bot/wsgi.py (SIMPLIFIED and FINAL)
 
 import sys
-# main.py से create_app function import kiya
 from main import create_app
 
-# Apne username aur project folder ke naam ka upyog karen
-USERNAME = 'gauravwhy' 
-PROJECT_FOLDER = 'Lqink_bot' 
-
-# Project directory ko Python path mein jodna
-project_home = f'/home/{USERNAME}/{PROJECT_FOLDER}'
-
+# Project directory ko sys.path mein jodna
+project_home = '/home/gauravwhy/Lqink_bot' 
 if project_home not in sys.path:
     sys.path.insert(0, project_home)
 
-# Flask application ko create_app() function call se lena
+# application variable jise gunicorn dekhta hai
 application = create_app()
