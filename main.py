@@ -1,16 +1,15 @@
-# /home/gauravwhy/Lqink_bot/main.py (Final Code with Security & Bypass Fix)
+# /home/gauravwhy/Lqink_bot/main.py (Final Code with Security & Bypass Fix for Railway)
 import logging
 import re
-import os # Security Fix: Environment variables ke liye
+import os # Environment variables ke liye zaroori
 import sys
 import asyncio 
 from telegram import Bot 
 from typing import Final
 from flask import Flask, request, jsonify 
 
-# scraper.py से फंक्शन इम्पोर्ट करना 
+# scraper.py से फंक्शन इम्पोर्ट करना
 try:
-    # Ye import zaroori hai, bhale hi hum run_scraper ko call na karein
     from scraper import run_scraper, clean_up_files 
 except ImportError:
     pass
@@ -21,9 +20,10 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger(__name__)
 
 # --- SECURE BOT TOKEN LOADING ---
-# ⚠️ SECURITY FIX: BOT_TOKEN ko Environment Variable se load karna
+# ⚠️ FIX: BOT_TOKEN को Environment Variable से लोड करना
 BOT_TOKEN: Final = os.environ.get("BOT_TOKEN") 
 if not BOT_TOKEN:
+    # App yahan crash ho jayega agar Railway/Variables mein token set nahi hai
     logger.error("❌ FATAL: BOT_TOKEN environment variable not set!")
     sys.exit(1)
     
@@ -63,19 +63,17 @@ def handle_update(update_data):
         return
 
     try:
-        # Handle /start command
         if text == "/start":
             run_sync(BOT.send_message(chat_id, "Hello! I am Lqink Bot. Please send me the URL."))
             return
 
-        # Handle URL 
         if not URL_REGEX.fullmatch(text):
             run_sync(BOT.send_message(chat_id, "Please send a valid and complete URL (starting with http/https)."))
             return
 
         user_url = text
         
-        # ⚠️ SCRAPING LOGIC BYPASSED: Direct success message
+        # ⚠️ SCRAPING LOGIC BYPASSED
         success_message = f"✅ URL received: **{user_url}**\n\n_Scraping logic is currently bypassed due to network restrictions. This confirms your bot is running stable._"
         run_sync(BOT.send_message(chat_id, success_message, parse_mode='Markdown'))
         
@@ -96,7 +94,6 @@ def create_app():
             update_data = request.get_json()
             handle_update(update_data)
 
-        # Always return 200 OK instantly to Telegram
         return jsonify({'status': 'ok'}), 200 
 
     return app
