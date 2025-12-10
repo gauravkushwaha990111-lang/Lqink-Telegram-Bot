@@ -1,5 +1,4 @@
-# CODE A: /home/gauravwhy/Lqink_bot/main.py (Scraper Bypass Fix)
-
+# /home/gauravwhy/Lqink_bot/main.py (Final Code with Bypass and Async Fix)
 import logging
 import re
 import os
@@ -9,11 +8,12 @@ from telegram import Bot
 from typing import Final
 from flask import Flask, request, jsonify 
 
-# scraper.py से फंक्शन इम्पोर्ट करना - अब हम इसे कॉल नहीं करेंगे, लेकिन इम्पोर्ट रखते हैं
+# scraper.py से फंक्शन इम्पोर्ट करना 
 try:
     from scraper import run_scraper, clean_up_files
 except ImportError:
-    sys.exit(1)
+    # Railay pe chalega, PythonAnywhere pe fail ho sakta hai bina file
+    pass
 
 # Logging setup
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -45,7 +45,7 @@ URL_REGEX = re.compile(
     r'(?::\d+)?' 
     r'(?:/?|[/?]\S+)$', re.IGNORECASE)
 
-# --- CORE HANDLER FUNCTIONS (Updated to bypass scraping logic) ---
+# --- CORE HANDLER FUNCTIONS ---
 
 def handle_update(update_data):
     """Processes a single Telegram Update dictionary (Raw JSON)."""
@@ -56,8 +56,6 @@ def handle_update(update_data):
     if not chat_id or not text:
         return
 
-    status_msg = None 
-    
     try:
         # Handle /start command
         if text == "/start":
@@ -72,15 +70,14 @@ def handle_update(update_data):
         user_url = text
         
         # ⚠️ SCRAPING LOGIC BYPASSED: Direct success message
-        success_message = f"✅ URL received: **{user_url}**\n\n_Scraping logic is currently bypassed due to PythonAnywhere network restrictions. This confirms your bot is running stable._"
+        success_message = f"✅ URL received: **{user_url}**\n\n_Scraping logic is currently bypassed due to network restrictions. This confirms your bot is running stable._"
         run_sync(BOT.send_message(chat_id, success_message, parse_mode='Markdown'))
         
     except Exception as e:
         logger.error(f"Main handling error: {e}")
         error_text = f"❌ An unexpected error occurred: {e}"
-        # Send error message back to the user
         run_sync(BOT.send_message(chat_id, error_text))
-            
+
 # --- FLASK APPLICATION SETUP ---
 
 def create_app():
