@@ -1,100 +1,190 @@
-# /home/gauravwhy/Lqink_bot/scraper.py (FINAL ADVANCED EXTRACTION)
-
+# scraper.py
 import requests
 from bs4 import BeautifulSoup
 import os
+import tempfile
 import re
 import logging
 from urllib.parse import urljoin, urlparse
 
+# Logging configuration for scraper
 logger = logging.getLogger(__name__)
 
-SCRAPER_API_KEY = os.environ.get("SCRAPER_API_KEY")
-
 # --- UTILITY FUNCTIONS ---
-def fetch_html_via_api(url):
-    """Fetches HTML content using ScraperAPI."""
-    if not SCRAPER_API_KEY: return None, "Error: SCRAPER_API_KEY not set. Check Render Variables."
-    API_URL = "http://api.scraperapi.com/"
-    payload = {'api_key': SCRAPER_API_KEY, 'url': url, 'country_code': 'us'}
 
+def fetch_html(url):
+    """Diye gaye URL se HTML content fetch karta hai. Mazboot User-Agent aur Referer ka upyog."""
     try:
-        response = requests.get(API_URL, params=payload, timeout=45)
+        # ⚠️ BADA BADLAV: Puri tarah se browser ki nakal (emulation)
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+            # Website ko lagega ki hum Google search se redirect hue hain
+            'Referer': 'https://www.google.com/', 
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1'
+        }
+        
+        # Requests Session ka upyog karna, jo cookies ko manage karta hai
+        session = requests.Session()
+        response = session.get(url, headers=headers, timeout=15)
+        
         response.raise_for_status() 
-        if response.status_code == 200:
-            return response.content, None
-        else:
-            return None, f"ScraperAPI returned status code: {response.status_code}"
+        return response.content
     except requests.exceptions.RequestException as e:
-        logger.error(f"API fetch error for {url}: {e}")
-        return None, f"Network or API Call Error: {e}"
+        logger.error(f"HTML fetch error for {url}: {e}")
+        return None
 
-# --- ADVANCED EXTRACTION FUNCTIONS ---
-def extract_advanced_data(soup, base_url):
-    """Extracts Images, Videos, and Downloadable files/Links from HTML."""
-    images = set()
-    videos = set()
-    downloads = set()
-    general_links = set()
-
-    download_extensions = ['.mp4', '.avi', '.zip', '.rar', '.pdf', '.exe', '.apk', '.iso', '.mp3', '.torrent', '.dmg']
-    
-    # 1. Images (<img> tags)
-    for img in soup.find_all('img', src=True):
-        src = urljoin(base_url, img['src'])
-        if src.startswith('http'): images.add(src)
-            
-    # 2. Videos (<video> tags)
-    for video in soup.find_all('video', src=True):
-        src = urljoin(base_url, video['src'])
-        if src.startswith('http'): videos.add(src)
-    
-    # 3. Downloadable Files (Links)
-    for a_tag in soup.find_all('a', href=True):
-        href = urljoin(base_url, a_tag['href'])
-        text = a_tag.get_text(strip=True) or os.path.basename(urlparse(href).path)
-
-        if not href.startswith('http'): continue
-            
-        is_download = False
-        
-        # Check by extension
-        if any(href.lower().endswith(ext) for ext in download_extensions):
-             is_download = True
-        
-        # Check by link text
-        if re.search(r'download|install|apk|zip|video|file|gofile\.io', text.lower()) and not is_download:
-             is_download = True
-        
-        if href in images or href in videos: continue
-
-        if is_download:
-            downloads.add((text, href))
-        else:
-            general_links.add((text, href))
-
-    return {
-        'images': list(images)[:6],
-        'videos': list(videos)[:2],
-        'downloads': list(downloads),
-        'general': list(general_links)[:10]
-    }
-
-# --- MAIN SCRAPER FUNCTION ---
-def run_scraper(url):
-    """Runs the scraping process."""
-    html_content, error_msg = fetch_html_via_api(url)
-    if error_msg: return {'status': 'error', 'message': error_msg}
-
+def download_file(url, file_type):
+    """File ko temporary directory mein download karta hai. Timeout badhaya gaya (30s)."""
     try:
-        soup = BeautifulSoup(html_content, 'html.parser')
-        extracted_data = extract_advanced_data(soup, url)
+        # User-Agent aur Referer ka upyog download ke samay bhi
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+            'Referer': 'https://www.google.com/' 
+        }
+        
+        session = requests.Session()
+        # ⚠️ BADLAV: Timeout 30 seconds
+        response = session.get(url, headers=headers, stream=True, timeout=30) 
+        response.raise_for_status()
 
-        return {'status': 'success', 'data': extracted_data, 'message': 'Data extracted via ScraperAPI.'}
+        temp_dir = tempfile.gettempdir()
+        file_extension = '.jpg' if file_type == 'image' else '.mp4' 
+        
+        # URL ko resolve karne ke liye (Agar relative path hai)
+        # base_url = response.url # Aapko base url pass karna chahiye tha, par abhi simplify rakhte hain
+        
+        temp_file_path = os.path.join(temp_dir, os.urandom(12).hex() + file_extension)
 
+        with open(temp_file_path, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+        
+        return temp_file_path
+    except requests.exceptions.RequestException as e:
+        logger.error(f"File download error for {url}: {e}")
+        return None
     except Exception as e:
-        logger.error(f"Scraping/Parsing Error: {e}")
-        return {'status': 'error', 'message': f"Parsing failed: {e}"}
+        logger.error(f"Error saving file: {e}")
+        return None
 
 def clean_up_files(file_list):
-    pass
+    """Temporary files ko delete karta hai (Storage bachaane ke liye)."""
+    for file_path in file_list:
+        try:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        except OSError as e:
+            logger.error(f"Error cleaning up {file_path}: {e}")
+
+# --- SCRAPING LOGIC FUNCTIONS ---
+
+def extract_media(soup):
+    """HTML se top 7 images aur top 2 video links/files nikalta hai."""
+    media_paths = []
+    img_tags = soup.find_all('img')
+    img_count = 0
+    
+    for img in img_tags:
+        if img_count >= 7: 
+            break
+        src = img.get('src')
+        
+        if src and src.startswith(('http', 'https')) and ('logo' not in src.lower() and 'icon' not in src.lower()):
+            
+            # Try-Except block taaki fail hone par bot na ruke
+            try: 
+                path = download_file(src, 'image')
+                if path:
+                    media_paths.append(path)
+                    img_count += 1
+            except Exception as e:
+                logger.warning(f"Skipping failed image download: {src}. Error: {e}")
+                continue 
+
+    # Videos nikalna
+    video_count = 0
+    video_elements = soup.find_all(['iframe', 'video'])
+    for element in video_elements:
+        if video_count >= 2:
+            break
+        
+        if element.name == 'iframe':
+            src = element.get('src')
+            if src and ('youtube.com/embed' in src or 'player.vimeo.com' in src):
+                media_paths.append(src) 
+                video_count += 1
+        
+    return media_paths
+
+def extract_links(soup):
+    """HTML se headings ke neeche ke download links nikalta hai."""
+    download_links = {}
+    current_category = None
+    
+    all_elements = soup.find('body').find_all(['h2', 'h3', 'a'], limit=200) 
+
+    for element in all_elements:
+        text = element.get_text(strip=True)
+        
+        # Category ki pehchaan (e.g., DOWNLOAD FOR WINDOWS)
+        if element.name in ['h2', 'h3'] and 'DOWNLOAD FOR' in text.upper():
+            current_category = text.strip()
+            download_links[current_category] = []
+        
+        # Download link ki pehchaan
+        elif current_category and element.name == 'a':
+            href = element.get('href')
+            button_text = element.get_text(strip=True)
+            
+            if href and href.startswith('http') and ('download' in button_text.lower() or any(ext in href.lower() for ext in ['.exe', '.apk', '.zip', '.iso', '.dmg'])):
+                if href not in download_links[current_category]:
+                    download_links[current_category].append(href)
+    
+    return download_links
+
+def extract_user_count(soup):
+    """HTML se 'monthly users' ki sankhya nikalta hai."""
+    try:
+        text_data = soup.get_text()
+        match = re.search(r'([\d,]+)\s+monthly users', text_data, re.IGNORECASE)
+        
+        if match:
+            return f"{match.group(1)} monthly users"
+        
+        return "N/A"
+    
+    except Exception as e:
+        logger.error(f"User count extraction error: {e}")
+        return "N/A"
+
+# --- MAIN SCRAPER FUNCTION ---
+
+def run_scraper(url):
+    """Pura scraping process chalaata hai aur results return karta hai."""
+    logger.info(f"Scraping started for: {url}")
+    html_content = fetch_html(url)
+    if not html_content:
+        # Yahan 'Failed to fetch website content.' return hoga
+        return {'status': 'error', 'message': 'Failed to fetch website content.'}
+
+    soup = BeautifulSoup(html_content, 'html.parser')
+    
+    results = {
+        'status': 'success',
+        'media_paths': [],      
+        'download_links': {},   
+        'user_count': 'N/A'     
+    }
+
+    # Data extraction
+    results['media_paths'] = extract_media(soup)
+    results['download_links'] = extract_links(soup)
+    results['user_count'] = extract_user_count(soup)
+    
+    logger.info("Scraping finished.")
+    return results
+
+# if __name__ == '__main__': logic is removed for deployment
