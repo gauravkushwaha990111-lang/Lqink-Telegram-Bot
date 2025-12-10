@@ -14,7 +14,6 @@ from typing import Final
 try:
     from scraper import run_scraper, clean_up_files
 except ImportError:
-    # Deployment fail ho jayega agar scraper.py missing hai
     sys.exit(1)
 
 # Logging setup
@@ -55,7 +54,6 @@ def run_sync(coroutine):
 
 def handle_update(update_data):
     """Processes a single Telegram Update dictionary (Raw JSON)."""
-    # Raw JSON data ko parse karna
     message_data = update_data.get('message', {})
     text = message_data.get('text', '').strip()
     chat_id = message_data.get('chat', {}).get('id')
@@ -101,7 +99,6 @@ def handle_update(update_data):
                         file_handle = open(item_path, 'rb')
                         open_files.append(file_handle)
                         
-                        # Your original file extension check
                         if item_path.endswith(('.jpg', '.png')):
                             media_group.append(InputMediaPhoto(media=file_handle))
                         elif item_path.endswith(('.mp4', '.mov')):
@@ -115,7 +112,6 @@ def handle_update(update_data):
                         
                 if media_group:
                     try:
-                        # send_media_group is an async operation
                         run_sync(BOT.send_media_group(chat_id=chat_id, media=media_group))
                         logger.info("Media group successfully sent.")
                     finally:
@@ -127,7 +123,7 @@ def handle_update(update_data):
             run_sync(BOT.send_message(chat_id, "⚠️ Media (Images/Videos) sending failed, but continuing with links."))
 
 
-        # C) Download Links Sending (This creates the desired card previews)
+        # C) Download Links Sending (Final Card Preview Logic)
         download_links = results['download_links']
         
         if download_links:
@@ -138,11 +134,16 @@ def handle_update(update_data):
                 # 1. Category Heading Sending (e.g., DOWNLOAD FOR WINDOWS)
                 run_sync(BOT.send_message(chat_id, f"**{category}**", parse_mode='Markdown'))
                 
-                # 2. Sending each Link in /addlink format (for card preview)
+                # 2. Sending each Link to trigger the Card Preview
                 for i, link_url in enumerate(links):
-                    # Link text for card preview (Your original /addlink format)
-                    link_message = f"{i+1}. /addlink {link_url}" 
-                    run_sync(BOT.send_message(chat_id, link_message, disable_web_page_preview=False)) # Card Preview ON!
+                    # a) Send the index and text in one line (This is the text header part)
+                    index_text = f"**{i+1}.** Download Link"
+                    run_sync(BOT.send_message(chat_id, index_text, parse_mode='Markdown'))
+                    
+                    # b) Send the raw URL in the next line to FORCE the card preview
+                    # Telegram Web Preview केवल URL वाली लाइन पर ही सबसे अच्छा काम करता है।
+                    run_sync(BOT.send_message(chat_id, link_url, disable_web_page_preview=False)) 
+                    
         else:
              run_sync(BOT.edit_message_text(chat_id=chat_id, message_id=status_msg.message_id,
                                             text="⚠️ Scraping complete, but no download links were found."))
