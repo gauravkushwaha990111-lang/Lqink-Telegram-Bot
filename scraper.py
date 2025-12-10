@@ -13,12 +13,10 @@ logger = logging.getLogger(__name__)
 # --- UTILITY FUNCTIONS ---
 
 def fetch_html(url):
-    """Diye gaye URL se HTML content fetch karta hai. Mazboot User-Agent aur Referer ka upyog."""
+    """Diye gaye URL se HTML content fetch karta hai."""
     try:
-        # ⚠️ BADA BADLAV: Puri tarah se browser ki nakal (emulation)
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-            # Website ko lagega ki hum Google search se redirect hue hain
             'Referer': 'https://www.google.com/', 
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
             'Accept-Language': 'en-US,en;q=0.9',
@@ -26,7 +24,6 @@ def fetch_html(url):
             'Upgrade-Insecure-Requests': '1'
         }
         
-        # Requests Session ka upyog karna, jo cookies ko manage karta hai
         session = requests.Session()
         response = session.get(url, headers=headers, timeout=15)
         
@@ -37,24 +34,19 @@ def fetch_html(url):
         return None
 
 def download_file(url, file_type):
-    """File ko temporary directory mein download karta hai. Timeout badhaya gaya (30s)."""
+    """File ko temporary directory mein download karta hai."""
     try:
-        # User-Agent aur Referer ka upyog download ke samay bhi
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
             'Referer': 'https://www.google.com/' 
         }
         
         session = requests.Session()
-        # ⚠️ BADLAV: Timeout 30 seconds
         response = session.get(url, headers=headers, stream=True, timeout=30) 
         response.raise_for_status()
 
         temp_dir = tempfile.gettempdir()
         file_extension = '.jpg' if file_type == 'image' else '.mp4' 
-        
-        # URL ko resolve karne ke liye (Agar relative path hai)
-        # base_url = response.url # Aapko base url pass karna chahiye tha, par abhi simplify rakhte hain
         
         temp_file_path = os.path.join(temp_dir, os.urandom(12).hex() + file_extension)
 
@@ -71,7 +63,7 @@ def download_file(url, file_type):
         return None
 
 def clean_up_files(file_list):
-    """Temporary files ko delete karta hai (Storage bachaane ke liye)."""
+    """Temporary files ko delete karta hai."""
     for file_path in file_list:
         try:
             if os.path.exists(file_path):
@@ -94,7 +86,6 @@ def extract_media(soup):
         
         if src and src.startswith(('http', 'https')) and ('logo' not in src.lower() and 'icon' not in src.lower()):
             
-            # Try-Except block taaki fail hone par bot na ruke
             try: 
                 path = download_file(src, 'image')
                 if path:
@@ -167,7 +158,6 @@ def run_scraper(url):
     logger.info(f"Scraping started for: {url}")
     html_content = fetch_html(url)
     if not html_content:
-        # Yahan 'Failed to fetch website content.' return hoga
         return {'status': 'error', 'message': 'Failed to fetch website content.'}
 
     soup = BeautifulSoup(html_content, 'html.parser')
@@ -186,5 +176,3 @@ def run_scraper(url):
     
     logger.info("Scraping finished.")
     return results
-
-# if __name__ == '__main__': logic is removed for deployment
