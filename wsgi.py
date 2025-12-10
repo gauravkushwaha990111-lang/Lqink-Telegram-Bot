@@ -1,12 +1,8 @@
-# /home/gauravwhy/Lqink_bot/wsgi.py (FINAL)
+# /home/gauravwhy/Lqink_bot/wsgi.py (FINAL & CLEAN for Railway)
 
 import sys
 from main import create_app
 
-# Project directory ko sys.path mein jodna (Optional, but safe)
-project_home = '/home/gauravwhy/Lqink_bot' 
-if project_home not in sys.path:
-    sys.path.insert(0, project_home)
-
-# application variable jise gunicorn dekhta hai
+# application variable jise gunicorn dekhta hai.
+# Railway yahan se Flask application ko load karega.
 application = create_app()
