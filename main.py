@@ -1,7 +1,7 @@
-# /home/gauravwhy/Lqink_bot/main.py (Final Code with Bypass and Async Fix)
+# /home/gauravwhy/Lqink_bot/main.py (Final Code with Security & Bypass Fix)
 import logging
 import re
-import os
+import os # Security Fix: Environment variables ke liye
 import sys
 import asyncio 
 from telegram import Bot 
@@ -10,9 +10,9 @@ from flask import Flask, request, jsonify
 
 # scraper.py से फंक्शन इम्पोर्ट करना 
 try:
-    from scraper import run_scraper, clean_up_files
+    # Ye import zaroori hai, bhale hi hum run_scraper ko call na karein
+    from scraper import run_scraper, clean_up_files 
 except ImportError:
-    # Railay pe chalega, PythonAnywhere pe fail ho sakta hai bina file
     pass
 
 # Logging setup
@@ -20,9 +20,15 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
                     level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Your BOT TOKEN
-BOT_TOKEN: Final = "8542635271:AAFZx_VkzDFwdi42GcIHf9Lb4rF8VgBHkZY"
+# --- SECURE BOT TOKEN LOADING ---
+# ⚠️ SECURITY FIX: BOT_TOKEN ko Environment Variable se load karna
+BOT_TOKEN: Final = os.environ.get("BOT_TOKEN") 
+if not BOT_TOKEN:
+    logger.error("❌ FATAL: BOT_TOKEN environment variable not set!")
+    sys.exit(1)
+    
 BOT = Bot(token=BOT_TOKEN)
+# ---------------------
 
 # --- ASYNC HELPER (Required for PTB v22.5) ---
 def run_sync(coroutine):
@@ -45,7 +51,7 @@ URL_REGEX = re.compile(
     r'(?::\d+)?' 
     r'(?:/?|[/?]\S+)$', re.IGNORECASE)
 
-# --- CORE HANDLER FUNCTIONS ---
+# --- CORE HANDLER FUNCTIONS (Scraper bypassed) ---
 
 def handle_update(update_data):
     """Processes a single Telegram Update dictionary (Raw JSON)."""
